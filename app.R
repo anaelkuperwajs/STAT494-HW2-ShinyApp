@@ -1,6 +1,7 @@
 library(tidyverse)
 library(tidymodels)
 library(bslib)
+library(rsconnect)
 library(shiny)
 
 readRDS("final_model.rds")
@@ -134,9 +135,10 @@ server <- function(input, output) {
     lending_club %>% 
       filter(name == input$name, 
              sex == input$sex) %>% 
-      ggplot() +
-      geom_line(aes(x = year, y = n)) +
-      scale_x_continuous(limits = input$years) +
+      rename(yhat = '_yhat_')
+      ggplot(aes_string(x = variable, y = "yhat")) +
+      geom_line() +
+      scale_x_continuous(limits = input$variables) +
       theme_minimal()
   })
 }
@@ -162,4 +164,4 @@ shinyApp(ui = ui, server = server)
 # * Publish your app to [shinyapps.io](https://www.shinyapps.io/).
 # There are instructions for doing that on the tutorial I linked to above.
 
-
+# rsconnect::deployApp('path/to/your/app')
