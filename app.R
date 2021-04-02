@@ -1,8 +1,18 @@
 library(tidyverse)
 library(tidymodels)
+library(stacks)
+library(modeldata)
 library(bslib)
 library(rsconnect)
 library(shiny)
+library(ranger)
+library(naniar)
+library(lubridate)
+library(moderndive)
+library(vip)
+library(DALEX) 
+library(DALEXtra)
+library(patchwork)
 
 lending_club_final_model <- readRDS("final_model.rds")
 data("lending_club")
@@ -25,7 +35,7 @@ ui <- fluidPage(
               choices = list(term_36 = "term_36", term_60 = "term_60")),
   selectInput("sub_grade", 
               "Sub grade", 
-              choices = list(A = "A", B = "B", C = "C", D = "D", E = "E", F = "F")),
+              choices = levels(lending_club$sub_grade)),
   selectInput("addr_state", 
               "State", 
               choices = list(Alaska = "AK", Alabama = "AL", Arkansas = "AR", Arizona = "AZ", California = "CA",
@@ -114,26 +124,18 @@ ui <- fluidPage(
                max = 600000),
   selectInput("variable", 
               "Choose a variable to explore", 
-              choices = list("funded_amnt", "int_rate", "annual_inc", "delinq_2yrs",
+              choices = list("Funded Amount" = "funded_amnt", "int_rate", "annual_inc", "delinq_2yrs",
                              "inq_last_6mths", "revol_util", "open_il_6m", "open_il_12m",    
                              "open_il_24m", "total_bal_il", "all_util", "inq_fi",
                              "inq_last_12m", "num_il_tl", "total_il_high_credit_limit")),
   plotOutput(outputId = "cp_profile")
 )
 
-# * Another part of the user interface will allow them to choose a variable
-# (you can limit this to only the quantitative variables) where they can explore
-# the effects of changing that variable, holding all others constant.
-
-# * After the user has entered all the required values, the output will be a
-# CP profile with the the predicted value for the data that was entered,
-# indicated by a point. I don't think the functions from `DALEX` and `DALEXtra`
-# will work with a stacked model, so you'll likely have to (get to) do some of your own coding. 
-
+#Currently setup for just int_rate, not using 'Choose a variable to explore'
 
 server <- function(input, output) {
   output$cp_profile <- renderPlot({
-    df <- tibble(funded_amnt = input$funded_amnt,
+    df <- data.frame(funded_amnt = input$funded_amnt,
                  term = input$term,
                  int_rate = input$int_rate,
                  sub_grade = input$sub_grade,
@@ -154,15 +156,10 @@ server <- function(input, output) {
                  num_il_tl = input$num_il_tl,
                  total_il_high_credit_limit = input$total_il_high_credit_limit)
     
-
-    obs <- lending_club %>%
-      slice(4) %>%
-      mutate(funded_amnt = input$funded_amnt)
-    
     min_var <- min(lending_club$int_rate)
     max_var <- max(lending_club$int_rate)
     
-    obs_many <- obs %>% 
+    obs_many <- df %>% 
       sample_n(size = 50, replace = TRUE) %>% 
       select(-int_rate) %>%
       mutate(int_rate = seq(min_var, max_var, length.out = 50))
