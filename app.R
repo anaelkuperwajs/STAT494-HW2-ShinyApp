@@ -4,27 +4,27 @@ library(bslib)
 library(rsconnect)
 library(shiny)
 
-readRDS("final_model.rds")
+lending_club_final_model <- readRDS("final_model.rds")
 data("lending_club")
 
 
 ui <- fluidPage(
   theme = bs_theme(version = 4, bootswatch = "flatly"),
   numericInput(inputId = "funded_amnt", 
-              label = "Funded Amount",
+              label = "Funded amount",
               value = 1000,
               min = 1000, 
               max = 40000),
   numericInput("int_rate",
-               "Int Rate",
+               "Interest Rate",
                value = 4,
                min = 4,
                max = 30),
   selectInput("term", 
-              "Term", 
+              "The number of payments on the loan", 
               choices = list(term_36 = "term_36", term_60 = "term_60")),
   selectInput("sub_grade", 
-              "Sub Grade", 
+              "Sub grade", 
               choices = list(A = "A", B = "B", C = "C", D = "D", E = "E", F = "F")),
   selectInput("addr_state", 
               "State", 
@@ -44,71 +44,71 @@ ui <- fluidPage(
               "Verification Status", 
               choices = list(Not_Verified = "Not_Verified", Source_Verified = "Source_Verified", Verified = "Verified")),
   numericInput("annual_inc",
-               "Annual Income",
+               "Annual income",
                value = 0,
                min = 0,
                max = 960000),
   selectInput("emp_length", 
-              "Emp Length", 
+              "Employment length in years", 
               choices = list("emp_lt_1", "emp_1", "emp_ge_10", "emp_2", "emp_3", "emp_4", "emp_5", "emp_6",    
                              "emp_7", "emp_8", "emp_9", "emp_unk")),
   numericInput("delinq_2yrs",
-               "2 year delinquency",
+               "The number of delinquency incidents over the past 2 years",
                value = 0,
                min = 0,
                max = 22),
   numericInput("inq_last_6mths",
-               "Inq Last 6 Months",
+               "The number of inquiries in past 6 months",
                value = 0,
                min = 0,
                max = 5),
   numericInput("revol_util",
-               "revol_util",
+               "Revolving line utilization rate",
                value = 0,
                min = 0,
                max = 150),
   numericInput("open_il_6m",
-               "open_il_6m",
+               "Number of installment accounts opened in past 6 months",
                value = 0,
                min = 0,
                max = 32),
   numericInput("open_il_12m",
-               "open_il_12m",
+               "Number of installment accounts opened in past 12 months",
                value = 0,
                min = 0,
                max = 20),
   numericInput("open_il_24m",
-               "open_il_24m",
+               "Number of installment accounts opened in past 24 months",
                value = 0,
                min = 0,
                max = 30),
   numericInput("total_bal_il",
-               "total_bal_il",
+               "Total current balance of all installment accounts",
                value = 0,
                min = 0,
                max = 600000),
   numericInput("all_util",
-               "all_util",
+               "Balance to credit limit on all trades",
                value = 0,
                min = 0,
                max = 200),
   numericInput("inq_fi",
-               "inq_fi",
+               "Number of personal finance inquiries",
                value = 0,
                min = 0,
                max = 15),
   numericInput("inq_last_12m",
-               "inq_last_12m",
+               "Number of credit inquiries in past 12 months",
                value = 0,
                min = 0,
                max = 32),
   numericInput("num_il_tl",
-               "num_il_tl",
+               "Number of installment accounts",
                value = 0,
                min = 0,
                max = 85),
   numericInput("total_il_high_credit_limit",
-               "total_il_high_credit_limit",
+               "Total installment high credit/credit limit",
                value = 0,
                min = 0,
                max = 600000),
@@ -130,38 +130,55 @@ ui <- fluidPage(
 # indicated by a point. I don't think the functions from `DALEX` and `DALEXtra`
 # will work with a stacked model, so you'll likely have to (get to) do some of your own coding. 
 
+
 server <- function(input, output) {
   output$cp_profile <- renderPlot({
-    lending_club %>% 
-      filter(name == input$name, 
-             sex == input$sex) %>% 
-      rename(yhat = '_yhat_')
-      ggplot(aes_string(x = variable, y = "yhat")) +
+    df <- tibble(funded_amnt = input$funded_amnt,
+                 term = input$term,
+                 int_rate = input$int_rate,
+                 sub_grade = input$sub_grade,
+                 addr_state = input$addr_state,
+                 verification_status = input$verification_status,
+                 annual_inc = input$annual_inc,
+                 emp_length = input$emp_length,
+                 delinq_2yrs = input$delinq_2yrs,
+                 inq_last_6mths = input$inq_last_6mths,
+                 revol_util = input$revol_util,
+                 open_il_6m = input$open_il_6m,
+                 open_il_12m = input$open_il_12m,
+                 open_il_24m = input$open_il_24m,
+                 total_bal_il = input$total_bal_il,
+                 all_util = input$all_util,
+                 inq_fi = input$inq_fi,
+                 inq_last_12m = input$inq_last_12m,
+                 num_il_tl = input$num_il_tl,
+                 total_il_high_credit_limit = input$total_il_high_credit_limit)
+    
+
+    obs <- lending_club %>%
+      slice(4) %>%
+      mutate(funded_amnt = input$funded_amnt)
+    
+    min_var <- min(lending_club$int_rate)
+    max_var <- max(lending_club$int_rate)
+    
+    obs_many <- obs %>% 
+      sample_n(size = 50, replace = TRUE) %>% 
+      select(-int_rate) %>%
+      mutate(int_rate = seq(min_var, max_var, length.out = 50))
+    
+    obs_many %>% 
+      select(int_rate) %>% 
+      bind_cols(
+        predict(lending_club_final_model,
+                new_data = obs_many, type = "prob")
+      ) %>% 
+      ggplot(aes(x = int_rate,
+                 y = .pred_good)) +
       geom_line() +
-      scale_x_continuous(limits = input$variables) +
-      theme_minimal()
+      labs(y = "Predicted")
   })
 }
 
-# cp_profile <- function(explainer, new_observation, var) {
-#   cp <-
-#     predict_profile(explainer = explainer, new_observation = new_observation, variables = var)
-#   cp %>%
-#     rename(yhat = '_yhat_') %>%
-#     ggplot(aes_string(x = var, y = "yhat")) +
-#     geom_line()
-# }
-# 
-# ob <-
-#   lending_club_testing %>% 
-#   slice(4)
-# 
-# cp_profile(rf_explain, ob, "int_rate")
-
 
 shinyApp(ui = ui, server = server)
-
-# * Publish your app to [shinyapps.io](https://www.shinyapps.io/).
-# There are instructions for doing that on the tutorial I linked to above.
-
-# rsconnect::deployApp('path/to/your/app')
